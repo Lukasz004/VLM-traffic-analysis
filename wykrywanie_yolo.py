@@ -1,7 +1,7 @@
 import cv2
 from ultralytics import YOLO
 
-# Zmienne globalne do rysowania linii
+#zmienne globalne do rysowania linii
 line_pts = []
 
 def select_line(event, x, y, flags, param):
@@ -11,6 +11,8 @@ def select_line(event, x, y, flags, param):
             line_pts.append((x, y))
 
 def get_side(p1, p2, pt):
+    #iloczyn wektorowy
+    #zwraca +1 lub -1 w zależności od tego, po której stronie linii znajduje się punkt, 0 oznacza współliniowość.
     d = (pt[0] - p1[0]) * (p2[1] - p1[1]) - (pt[1] - p1[1]) * (p2[0] - p1[0])
     if d > 0: return 1
     elif d < 0: return -1
@@ -61,9 +63,11 @@ def main():
         if not ret:
             break
 
+        #wbudowany tracker YOLO automatycznie przypisuje i utrzymuje ID
         results = model.track(frame, persist=True, verbose=False)
 
         if results[0].boxes.id is not None:
+            #rzutujemy tensory na inne typy aby mozna bylo potem wykorzystac wartosci
             boxes = results[0].boxes.xyxy.cpu().numpy()
             track_ids = results[0].boxes.id.int().cpu().tolist()
 
@@ -78,6 +82,7 @@ def main():
                 if track_id in tracked_sides:
                     old_side = tracked_sides[track_id]
                     
+                    #detekcja przejścia przez linie, obecny znak różni się od poprzedniego i obeikt nie jest na 0
                     if old_side != 0 and current_side != 0 and old_side != current_side:
                         crossed_count += 1
                         print(f"Obiekt ID:{track_id} przekroczył linię! (Suma: {crossed_count})")

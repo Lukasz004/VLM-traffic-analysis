@@ -11,6 +11,8 @@ def select_line(event, x, y, flags, param):
             line_pts.append((x, y))
 
 def get_signed_distance(p1, p2, pt):
+    # Znakowana odległość punktu od wektora linii. 
+    # Znak (+/-) determinuje, po której stronie linii znajduje się punkt.
     num = (pt[0] - p1[0]) * (p2[1] - p1[1]) - (pt[1] - p1[1]) * (p2[0] - p1[0])
     den = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
     if den == 0:
@@ -41,8 +43,7 @@ def main():
             cv2.circle(temp_frame, pt, 5, (0, 0, 255), -1)
         if len(line_pts) == 2:
             cv2.line(temp_frame, line_pts[0], line_pts[1], (0, 255, 0), 2)
-            cv2.putText(temp_frame, "Wcisnij SPACJE aby kontynuowac", (10, 30), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(temp_frame, "Wcisnij SPACJE aby kontynuowac", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
         cv2.imshow("Video", temp_frame)
         key = cv2.waitKey(1) & 0xFF
@@ -56,25 +57,26 @@ def main():
 
     p1, p2 = line_pts[0], line_pts[1]
     
-    #obliczanie wektora normalnego
+    #obliczanie  wektora normalnego do wyznaczonej linii
     dx = p2[0] - p1[0]
     dy = p2[1] - p1[1]
     length = math.hypot(dx, dy)
-    nx, ny = -dy / length, dx / length # wektor prostopadły
+    nx, ny = -dy / length, dx / length 
     
     tracked_objects = {}
     next_obj_id = 0
     crossed_count = 0
     
-    max_distance = 100      #maksymalny przeskok centroidu między klatkami
-    crossing_margin = 40   #jak daleko od linii musi odejść obiekt by zliczyć przekroczenie
+    max_distance = 100     
+    crossing_margin = 40   
     
+    #wyznaczanie równoległych linii marginesu które są przesunięte o wektor normalny względem zaznaczonej linii
     m1_p1 = (int(p1[0] + nx * crossing_margin), int(p1[1] + ny * crossing_margin))
     m1_p2 = (int(p2[0] + nx * crossing_margin), int(p2[1] + ny * crossing_margin))
     m2_p1 = (int(p1[0] - nx * crossing_margin), int(p1[1] - ny * crossing_margin))
     m2_p2 = (int(p2[0] - nx * crossing_margin), int(p2[1] - ny * crossing_margin))
 
-    #rownoleglobok buforowy
+    #definiowanie prostokątych obszarów po obu stronach linii wewnątrz marginesu,które zapobiegają błędnemu zliczaniu obiektów których bboxy pływają
     paralellogram_plus = np.array([p1, p2, m1_p2, m1_p1], dtype=np.int32)
     paralellogram_minus = np.array([p1, p2, m2_p2, m2_p1], dtype=np.int32)
 
@@ -98,6 +100,7 @@ def main():
             matched_id = None
             min_dist = float('inf')
 
+            #prosty tracker centroidowy inspirowany KNN
             for obj_id, data in tracked_objects.items():
                 old_cx, old_cy = data['centroid']
                 dist = math.hypot(cx - old_cx, cy - old_cy)
@@ -113,11 +116,14 @@ def main():
                 
                 new_state = old_state
                 
+                #aktualizacja stanu (+1/-1) tylko jeśli obiekt oddalił się za margines, 
+                #a w poprzedniej klatce znajdował się w odpowiedniej strefie buforowej (przecinał linię)
                 if sd > crossing_margin and cv2.pointPolygonTest(paralellogram_minus, (int(old_cx), int(old_cy)), measureDist=False) >= 0:
                     new_state = 1
                 elif sd < -crossing_margin and cv2.pointPolygonTest(paralellogram_plus, (int(old_cx), int(old_cy)), measureDist=False) >= 0:
                     new_state = -1
 
+                #jeśli stan sie zmienił rejestrujemy przecięcie
                 if old_state != 0 and new_state != 0 and old_state != new_state:
                     crossed_count += 1
                     print(f"Obiekt {matched_id} przekroczył linię! (Suma: {crossed_count})")
@@ -125,6 +131,7 @@ def main():
                 new_tracked_objects[matched_id] = {'centroid': (cx, cy), 'state': new_state}
                 del tracked_objects[matched_id]
             else:
+                #inicjalizacja nowego obiektu
                 initial_state = 0
                 if sd > crossing_margin:
                     initial_state = 1
